@@ -292,7 +292,7 @@ model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy']
 history = model.fit(
     train_images2,
     steps_per_epoch=len(train_images) / 8,
-    epochs=10,
+    epochs=20,
     validation_data = validation_images2
 )
 
@@ -360,7 +360,7 @@ def plot_accuracy(history):
 
 plot_accuracy(history)
 
-model.save('image_real_or_fake.h5')
+model.save('image_real_or_fake.keras')
 
 # Evaluate the model on the validation dataset
 eval_results = model.evaluate(validation_images2, steps=len(validation_images2), verbose=1)
