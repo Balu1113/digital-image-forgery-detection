@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Forgery Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 Image Forgery Detection</h1>
+            <p class="subtitle">Using Error Level Analysis (ELA) and Deep Learning</p>
+        </header>
+
+        <div class="upload-section">
+            <div class="upload-box" id="uploadBox">
+                <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <h3>Upload Image for Analysis</h3>
+                <p>Drag and drop an image here or click to browse</p>
+                <p class="file-info">Supported formats: JPEG, PNG (Max 16MB)</p>
+                <input type="file" id="fileInput" accept=".jpg,.jpeg,.png" hidden>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Analyzing image for forgery...</p>
+        </div>
+
+        <div class="results" id="results">
+            <h2>Analysis Results</h2>
+            
+            <div class="prediction-card" id="predictionCard">
+                <div class="prediction-label" id="predictionLabel"></div>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" id="confidenceFill"></div>
+                </div>
+                <p class="confidence-text" id="confidenceText"></p>
+            </div>
+
+            <div class="images-comparison">
+                <div class="image-container">
+                    <h3>Original Image</h3>
+                    <img id="originalImage" alt="Original image">
+                </div>
+                <div class="image-container">
+                    <h3>ELA Processed Image</h3>
+                    <img id="elaImage" alt="ELA processed image">
+                </div>
+            </div>
+
+            <div class="info-box">
+                <h3>About Error Level Analysis (ELA)</h3>
+                <p>ELA works by resaving the image at a known compression level and comparing it to the original. Areas with different compression levels appear brighter, indicating potential manipulation.</p>
+            </div>
+
+            <button class="btn-secondary" id="analyzeAnother">Analyze Another Image</button>
+        </div>
+
+        <div class="error" id="error">
+            <div class="error-icon">⚠️</div>
+            <p id="errorMessage"></p>
+            <button class="btn-secondary" id="tryAgain">Try Again</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
