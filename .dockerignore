@@ -1,0 +1,23 @@
+.git
+.gitignore
+.github
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+uploads
+ela_dataset
+ela_pics
+training_history.png
+*.log
+.env
+
+# Other services / local state (each service has its own build context)
+backend
+frontend
+tests
+notebooks
+README.md

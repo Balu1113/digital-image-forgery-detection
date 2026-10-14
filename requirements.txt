@@ -1,6 +1,21 @@
-# File: requirements.txt
+# Web application
+Flask>=3.0,<4.0
+Werkzeug>=3.0,<4.0
 
-Flask>=2.0
-tensorflow>=2.10
-Pillow
-numpy
+# Deep learning / inference
+tensorflow>=2.16,<2.17
+numpy>=1.26,<2.0
+h5py>=3.10,<4.0
+
+# Image processing
+Pillow>=10.0
+
+# Training / evaluation
+matplotlib>=3.8
+
+# Tests
+pytest>=8.0
+
+# Production server (optional)
+gunicorn>=21.0; platform_system != "Windows"
+waitress>=3.0; platform_system == "Windows"

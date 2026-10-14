@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Environment
+.env
+
+# Flask / runtime artefacts
+uploads/
+*.log
+
+# Django backend
+backend/db.sqlite3
+backend/media/
+backend/staticfiles/
+backend/.env
+
+# React frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Training artefacts
+ela_dataset/
+ela_pics/
+training_history.png
+resaved.jpg
+
+# Keep large model out of git by default (uncomment if you host it elsewhere)
+# image_real_or_fake.keras
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
