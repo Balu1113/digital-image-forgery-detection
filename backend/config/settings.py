@@ -30,11 +30,13 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    # Listed before staticfiles so our runserver override (which also starts
+    # the Flask inference service) takes precedence over the staticfiles one.
+    "predictions",
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
     "rest_framework.authtoken",
-    "predictions",
 ]
 
 MIDDLEWARE = [
@@ -126,3 +128,11 @@ CORS_ALLOW_CREDENTIALS = True
 FORGERY_API_URL = os.environ.get("FORGERY_API_URL", "http://127.0.0.1:5000")
 FORGERY_API_TIMEOUT = int(os.environ.get("FORGERY_API_TIMEOUT", 180))
 MAX_UPLOAD_SIZE = DATA_UPLOAD_MAX_MEMORY_SIZE
+
+# Auto-start the Flask inference service together with `manage.py runserver`.
+# Only active for local (loopback) FORGERY_API_URL values; Docker/gunicorn
+# deployments are unaffected because they never use the runserver command.
+INFERENCE_AUTOSTART = _as_bool(os.environ.get("INFERENCE_AUTOSTART"), default=True)
+INFERENCE_APP_DIR = os.environ.get("INFERENCE_APP_DIR", str(BASE_DIR.parent))
+INFERENCE_PYTHON = os.environ.get("INFERENCE_PYTHON", "")
+INFERENCE_STARTUP_TIMEOUT = int(os.environ.get("INFERENCE_STARTUP_TIMEOUT", 60))

@@ -88,13 +88,15 @@ pip install -r backend/requirements.txt
 Run each service in its own terminal:
 
 ```bash
-# 1) Flask inference service  -> http://127.0.0.1:5000
-python app.py
-
-# 2) Django API gateway       -> http://127.0.0.1:8000
+# 1) Django API gateway       -> http://127.0.0.1:8000
+#    (auto-starts the Flask inference service on :5000 and stops it again
+#     when the dev server exits; pass --no-inference to disable)
 cd backend
 python manage.py migrate
 python manage.py runserver 127.0.0.1:8000
+
+# 2) (optional) Flask inference service only -> http://127.0.0.1:5000
+python app.py
 
 # 3) React frontend           -> http://127.0.0.1:5173
 cd frontend
