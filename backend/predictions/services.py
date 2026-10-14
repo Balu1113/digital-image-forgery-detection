@@ -51,3 +51,22 @@ def check_health():
         return {"reachable": False, "error": str(exc)}
     except ValueError:
         return {"reachable": False, "error": "Invalid JSON from inference service."}
+
+
+def record_feedback(state, action, reward, count=True):
+    """Relay a reward signal to the inference service's bandit policy.
+
+    Returns True when the reward reached the service, False otherwise —
+    feedback itself is always stored locally, so a transient outage only
+    delays learning.
+    """
+    payload = {"state": state, "action": action, "reward": reward, "count": count}
+    try:
+        response = requests.post(
+            settings.FORGERY_API_URL.rstrip("/") + "/feedback",
+            json=payload,
+            timeout=min(settings.FORGERY_API_TIMEOUT, 10),
+        )
+    except requests.RequestException:
+        return False
+    return response.status_code == 200

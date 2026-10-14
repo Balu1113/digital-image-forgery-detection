@@ -41,6 +41,16 @@ class PredictionSerializer(serializers.ModelSerializer):
             "created_at",
             "original_image_url",
             "ela_image_url",
+            "feedback",
+            "policy_state",
+            "policy_action",
+            "policy_threshold",
+        )
+        read_only_fields = (
+            "feedback",
+            "policy_state",
+            "policy_action",
+            "policy_threshold",
         )
 
     def _absolute(self, field):

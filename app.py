@@ -10,6 +10,8 @@ Endpoints
 ``GET  /health``         Liveness + model status
 ``POST /predict``        Analyse an image (multipart field ``file``)
 ``POST /api/predict``    Alias of ``/predict``
+``GET  /policy``         Current bandit (RL decision policy) statistics
+``POST /feedback``       Reward signal for a past decision (state, action, reward)
 """
 
 import logging
@@ -21,6 +23,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 import model_utils
+from bandit import ContextualBandit
 from config import get_config
 
 logging.basicConfig(
@@ -43,6 +46,15 @@ def create_app(config_object=None):
     quality = app.config["ELA_QUALITY"]
     allowed = app.config["ALLOWED_EXTENSIONS"]
 
+    rl_enabled = app.config["RL_ENABLED"]
+    policy = ContextualBandit(
+        num_states=app.config["RL_STATES"],
+        actions=app.config["RL_ACTIONS"],
+        exploration=app.config["RL_EXPLORATION"],
+        path=app.config["POLICY_PATH"] if rl_enabled else None,
+    )
+    app.config["BANDIT"] = policy
+
     @app.route("/")
     def index():
         return jsonify(
@@ -52,6 +64,8 @@ def create_app(config_object=None):
                 "endpoints": {
                     "health": "/health",
                     "predict": "POST /predict",
+                    "policy": "GET /policy",
+                    "feedback": "POST /feedback",
                 },
                 "model_available": model_utils.is_model_available(model_path),
             }
@@ -95,6 +109,23 @@ def create_app(config_object=None):
                 threshold=threshold,
                 quality=quality,
             )
+
+            # RL: the bandit picks the decision threshold ("action") for this
+            # prediction's confidence bucket ("state"); the user's verdict
+            # feedback later supplies the reward.
+            p_real = result["real_probability"]
+            label = result["label"]
+            confidence = result["confidence"]
+            decision = None
+            if rl_enabled:
+                state = policy.state_for(p_real)
+                action = policy.select(state)
+                used_threshold = policy.actions[action]
+                if p_real >= used_threshold:
+                    label, confidence = "Real", p_real * 100.0
+                else:
+                    label, confidence = "Doctored", (1.0 - p_real) * 100.0
+                decision = {"state": state, "action": action, "threshold": used_threshold}
         except UnidentifiedImageError:
             return jsonify({"error": "Uploaded file is not a valid image."}), 400
         except (ValueError, OSError) as exc:
@@ -113,15 +144,47 @@ def create_app(config_object=None):
 
         return jsonify(
             {
-                "prediction": result["label"],
-                "confidence": round(result["confidence"], 2),
+                "prediction": label,
+                "confidence": round(confidence, 2),
                 "forgery_probability": round(result["forgery_probability"], 4),
                 "real_probability": round(result["real_probability"], 4),
                 "filename": secure_filename(file.filename),
                 "original_image": original_b64,
                 "ela_image": ela_b64,
+                "policy": decision,
             }
         )
+
+    @app.route("/policy")
+    def policy_stats():
+        return jsonify({"enabled": rl_enabled, **policy.summary()})
+
+    @app.route("/feedback", methods=["POST"])
+    def feedback():
+        """Learn from a user's verdict on a past prediction."""
+        if not rl_enabled:
+            return jsonify({"error": "Reinforcement learning is disabled (RL_ENABLED=false)."}), 400
+
+        data = request.get_json(silent=True) or {}
+        try:
+            state = int(data["state"])
+            action = int(data["action"])
+            reward = float(data["reward"])
+        except (KeyError, TypeError, ValueError):
+            return (
+                jsonify({"error": "Body must include numeric 'state', 'action' and 'reward'."}),
+                400,
+            )
+
+        count = data.get("count", True)
+        if isinstance(count, str):
+            count = count.strip().lower() in {"1", "true", "yes", "on"}
+
+        try:
+            policy.observe(state, action, reward, count=count)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"status": "ok", "policy": policy.summary()})
 
     @app.errorhandler(RequestEntityTooLarge)
     def handle_too_large(_error):

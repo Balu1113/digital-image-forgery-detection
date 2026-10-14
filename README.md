@@ -131,6 +131,8 @@ Optional: create an admin login with `python manage.py createsuperuser` (from
 | `GET`  | `/health`      | Liveness + model status              |
 | `POST` | `/predict`     | Analyse an image (`file` form field) |
 | `POST` | `/api/predict` | Alias of `/predict`                  |
+| `GET`  | `/policy`      | Bandit (RL policy) statistics        |
+| `POST` | `/feedback`    | Reward for a past decision           |
 
 ```bash
 curl -F "file=@photo.jpg" http://127.0.0.1:5000/predict
@@ -144,7 +146,8 @@ curl -F "file=@photo.jpg" http://127.0.0.1:5000/predict
   "real_probability": 0.0769,
   "filename": "photo.jpg",
   "original_image": "<base64 JPEG>",
-  "ela_image": "<base64 JPEG>"
+  "ela_image": "<base64 JPEG>",
+  "policy": {"state": 0, "action": 1, "threshold": 0.45}
 }
 ```
 
@@ -160,16 +163,41 @@ curl -F "file=@photo.jpg" http://127.0.0.1:5000/predict
 | `POST`   | `/api/predictions/`   | ✓    | Upload an image, store the result      |
 | `GET`    | `/api/predictions/`   | ✓    | List the current user's history        |
 | `GET`/`DELETE` | `/api/predictions/<id>/` | ✓ | Retrieve / delete one prediction  |
+| `POST`   | `/api/predictions/<id>/feedback/` | ✓ | Reward signal: `{"verdict": "correct"\|"incorrect"}` |
 
 Authentication uses DRF token auth: send `Authorization: Token <key>`.
 Analyzing images requires an account — logged-out visitors see a sign-in prompt
 instead of the upload panel.
 
+## Reinforcement learning (reward-driven decision policy)
+
+The classifier itself is fixed, but the *decision* it makes from the model's
+`P(real)` output is learned online with a contextual bandit (UCB1, `bandit.py`):
+
+| RL concept | Implementation |
+|------------|----------------|
+| **State** | Confidence bucket of `P(real)` (10 buckets: bucket *k* = `[k/10, (k+1)/10)`) |
+| **Action** | Which decision threshold to apply: `0.35`, `0.45`, `0.55` or `0.65` |
+| **Reward** | `+1` when the user marks the verdict **correct**, `-1` when **incorrect** |
+| **Policy** | Per-state UCB1: untried actions first, then `mean + c·√(2·ln N / n)` |
+| **Persistence** | `bandit_policy.json` next to the model (survives restarts) |
+
+Loop: `/predict` picks a threshold via the bandit and returns it in `policy`;
+Django stores `policy_state`/`policy_action` on the prediction; the ✓/✗ buttons
+in the UI call `POST /api/predictions/<id>/feedback/`, which relays the reward
+(delta-aware — changing your mind corrects the score without a new pull) to the
+Flask service. `GET /policy` shows live counts, means and the current best
+action per state.
+
+Tuning: `RL_ENABLED`, `RL_ACTIONS`, `RL_STATES`, `RL_EXPLORATION`,
+`POLICY_PATH` (Flask env; see `config.py`).
+
 ## Configuration
 
 **Flask** (`.env.example`): `MODEL_PATH`, `ELA_QUALITY`,
 `CLASSIFICATION_THRESHOLD` (default `0.45`), `MAX_CONTENT_LENGTH`, `HOST`, `PORT`,
-`FLASK_DEBUG`.
+`FLASK_DEBUG`, plus RL settings `RL_ENABLED`, `RL_ACTIONS`, `RL_STATES`,
+`RL_EXPLORATION`, `POLICY_PATH`.
 
 **Django** (`backend/.env.example`): `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`,
 `DJANGO_ALLOWED_HOSTS`, `DJANGO_DB_PATH`, `CORS_ALLOWED_ORIGINS`,

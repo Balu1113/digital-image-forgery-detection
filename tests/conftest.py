@@ -1,6 +1,7 @@
 import io
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,10 @@ def app():
     class TestConfig(Config):
         TESTING = True
         MAX_CONTENT_LENGTH = 5 * 1024 * 1024
+        # Keep the learned policy out of the repo during tests.
+        POLICY_PATH = os.path.join(
+            tempfile.mkdtemp(prefix="bandit-policy-"), "policy.json"
+        )
 
     application = create_app(TestConfig)
     return application

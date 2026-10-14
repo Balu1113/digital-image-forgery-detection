@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-export default function HistoryList({ items, loading, onDelete, onRefresh, authenticated }) {
+export default function HistoryList({ items, loading, onDelete, onRefresh, authenticated, onFeedback }) {
+  const [busyId, setBusyId] = useState(null);
+
   if (!authenticated) {
     return (
       <section className="card">
@@ -11,6 +14,12 @@ export default function HistoryList({ items, loading, onDelete, onRefresh, authe
         </p>
       </section>
     );
+  }
+
+  async function sendFeedback(id, verdict) {
+    setBusyId(id);
+    await onFeedback?.(id, verdict);
+    setBusyId(null);
   }
 
   return (
@@ -40,6 +49,37 @@ export default function HistoryList({ items, loading, onDelete, onRefresh, authe
                 {Number(item.confidence).toFixed(1)}% &middot; {new Date(item.created_at).toLocaleString()}
               </span>
             </div>
+            {!item.feedback || item.feedback === 'pending' ? (
+              <span className="history-feedback">
+                <button
+                  className="btn ghost small"
+                  onClick={() => sendFeedback(item.id, 'correct')}
+                  disabled={busyId === item.id}
+                  aria-label={`Mark verdict for ${item.filename || 'image'} correct`}
+                  title="Verdict correct"
+                >
+                  ✓
+                </button>
+                <button
+                  className="btn ghost small"
+                  onClick={() => sendFeedback(item.id, 'incorrect')}
+                  disabled={busyId === item.id}
+                  aria-label={`Mark verdict for ${item.filename || 'image'} incorrect`}
+                  title="Verdict incorrect"
+                >
+                  ✗
+                </button>
+              </span>
+            ) : (
+              <span
+                className={`feedback-badge ${
+                  item.feedback === 'correct' ? 'feedback-correct' : 'feedback-incorrect'
+                }`}
+                title={`Feedback: ${item.feedback}`}
+              >
+                {item.feedback === 'correct' ? '✓' : '✗'}
+              </span>
+            )}
             <button className="btn ghost small" onClick={() => onDelete(item.id)} aria-label="Delete">
               ✕
             </button>

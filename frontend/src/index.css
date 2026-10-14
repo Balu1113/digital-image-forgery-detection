@@ -582,3 +582,44 @@ body {
   margin-top: 32px;
   color: var(--footer-ink);
 }
+
+.feedback {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+  text-align: center;
+}
+
+.feedback-row {
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.feedback-status {
+  margin: 0;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.history-feedback {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.history-feedback .btn {
+  padding: 4px 9px;
+}
+
+.feedback-badge {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.feedback-correct {
+  color: var(--real);
+}
+
+.feedback-incorrect {
+  color: var(--error-ink);
+}

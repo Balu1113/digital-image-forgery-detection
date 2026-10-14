@@ -74,6 +74,22 @@ export default function HomePage() {
     }
   }
 
+  async function handleFeedback(id, verdict) {
+    try {
+      const data = await api.sendFeedback(id, verdict);
+      setResult((current) =>
+        current && current.id === id ? { ...current, feedback: data.feedback } : current
+      );
+      setHistory((items) =>
+        items.map((item) => (item.id === id ? { ...item, feedback: data.feedback } : item))
+      );
+      return data;
+    } catch (err) {
+      setError(err.message);
+      return null;
+    }
+  }
+
   const inferenceOk = health?.inference?.reachable;
 
   return (
@@ -109,7 +125,7 @@ export default function HomePage() {
                 )}
               </section>
 
-              <Results result={result} onReset={() => setResult(null)} />
+              <Results result={result} onReset={() => setResult(null)} onFeedback={handleFeedback} />
             </>
           ) : (
             <section className="card locked">
@@ -137,6 +153,7 @@ export default function HomePage() {
             authenticated={Boolean(user)}
             onDelete={handleDelete}
             onRefresh={refreshHistory}
+            onFeedback={handleFeedback}
           />
         </div>
       </main>

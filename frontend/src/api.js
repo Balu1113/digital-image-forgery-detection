@@ -78,6 +78,11 @@ export const api = {
   },
   history: () => request('/api/predictions/'),
   deletePrediction: (id) => request(`/api/predictions/${id}/`, { method: 'DELETE' }),
+  sendFeedback: (id, verdict) =>
+    request(`/api/predictions/${id}/feedback/`, {
+      method: 'POST',
+      body: JSON.stringify({ verdict }),
+    }),
 };
 
 export { setSession, clearSession };

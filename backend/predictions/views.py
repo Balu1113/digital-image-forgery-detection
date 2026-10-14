@@ -8,6 +8,8 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from PIL import Image, UnidentifiedImageError
 from rest_framework import generics, permissions, status
 from rest_framework.authtoken.models import Token
@@ -18,7 +20,7 @@ from rest_framework.views import APIView
 
 from .models import Prediction
 from .serializers import PredictionSerializer, UserPublicSerializer, UserSerializer
-from .services import InferenceServiceError, analyze_image, check_health
+from .services import InferenceServiceError, analyze_image, check_health, record_feedback
 
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 
@@ -109,6 +111,9 @@ class PredictionListCreateView(generics.ListCreateAPIView):
         except (KeyError, ValueError):
             return Response({"error": "Inference service returned malformed data."}, status=502)
 
+        # The bandit's decision (state/action/threshold) travels with the
+        # result so the reward can be attributed when feedback arrives.
+        policy = result.get("policy") or {}
         prediction = Prediction(
             user=request.user,
             filename=os.path.basename(upload.name)[:255],
@@ -116,6 +121,9 @@ class PredictionListCreateView(generics.ListCreateAPIView):
             confidence=result["confidence"],
             forgery_probability=result["forgery_probability"],
             real_probability=result.get("real_probability"),
+            policy_state=policy.get("state"),
+            policy_action=policy.get("action"),
+            policy_threshold=policy.get("threshold"),
         )
         stem = uuid.uuid4().hex
         prediction.original_image.save(f"{stem}.jpg", ContentFile(_to_jpeg_bytes(raw)), save=False)
@@ -132,6 +140,51 @@ class PredictionDetailView(generics.RetrieveDestroyAPIView):
 
     def get_queryset(self):
         return Prediction.objects.filter(user=self.request.user)
+
+
+class FeedbackView(APIView):
+    """Record the user's verdict and relay the reward to the bandit."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        prediction = get_object_or_404(Prediction, pk=pk, user=request.user)
+        verdict = str(request.data.get("verdict", "")).strip().lower()
+        if verdict not in {Prediction.Feedback.CORRECT, Prediction.Feedback.INCORRECT}:
+            return Response(
+                {"error": "verdict must be 'correct' or 'incorrect'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reward = 1.0 if verdict == Prediction.Feedback.CORRECT else -1.0
+        previous = prediction.feedback
+        previous_reward = {
+            Prediction.Feedback.PENDING: 0.0,
+            Prediction.Feedback.CORRECT: 1.0,
+            Prediction.Feedback.INCORRECT: -1.0,
+        }[previous]
+
+        prediction.feedback = verdict
+        prediction.feedback_at = timezone.now()
+        prediction.save(update_fields=["feedback", "feedback_at"])
+
+        synced = False
+        delta = reward - previous_reward
+        if (
+            delta != 0
+            and prediction.policy_state is not None
+            and prediction.policy_action is not None
+        ):
+            # First feedback counts as a fresh pull; a changed verdict only
+            # corrects the accumulated reward (count=False).
+            synced = record_feedback(
+                prediction.policy_state,
+                prediction.policy_action,
+                delta,
+                count=previous == Prediction.Feedback.PENDING,
+            )
+
+        return Response({"feedback": prediction.feedback, "synced": synced})
 
 
 class HealthView(APIView):

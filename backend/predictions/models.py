@@ -9,6 +9,11 @@ class Prediction(models.Model):
         REAL = "Real", "Real"
         DOCTORED = "Doctored", "Doctored"
 
+    class Feedback(models.TextChoices):
+        PENDING = "pending", "Pending"
+        CORRECT = "correct", "Correct"
+        INCORRECT = "incorrect", "Incorrect"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         related_name="predictions",
@@ -24,6 +29,18 @@ class Prediction(models.Model):
     forgery_probability = models.FloatField(help_text="1 - P(real), 0-1.")
     real_probability = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # RL decision the inference bandit made for this prediction (used to
+    # attribute the reward when the user gives feedback).
+    policy_state = models.PositiveSmallIntegerField(null=True, blank=True)
+    policy_action = models.PositiveSmallIntegerField(null=True, blank=True)
+    policy_threshold = models.FloatField(null=True, blank=True)
+
+    # User verdict on the analysis: the reward signal for the bandit.
+    feedback = models.CharField(
+        max_length=10, choices=Feedback.choices, default=Feedback.PENDING, blank=True
+    )
+    feedback_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

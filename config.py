@@ -41,6 +41,18 @@ class Config:
     PORT = int(os.environ.get("PORT", 5000))
     DEBUG = _as_bool(os.environ.get("FLASK_DEBUG"), default=False)
 
+    # --- reinforcement learning (contextual bandit decision policy) ----------
+    # When enabled, each prediction picks a decision threshold (an "action")
+    # via UCB1 for the model's confidence bucket ("state") and user feedback
+    # on the verdict supplies the reward (+1 correct / -1 incorrect).
+    RL_ENABLED = _as_bool(os.environ.get("RL_ENABLED"), default=True)
+    RL_ACTIONS = tuple(
+        float(x) for x in os.environ.get("RL_ACTIONS", "0.35,0.45,0.55,0.65").split(",") if x.strip()
+    )
+    RL_STATES = int(os.environ.get("RL_STATES", 10))
+    RL_EXPLORATION = float(os.environ.get("RL_EXPLORATION", 2.0))
+    POLICY_PATH = os.environ.get("POLICY_PATH", str(BASE_DIR / "bandit_policy.json"))
+
 
 def get_config():
     return Config

@@ -1,9 +1,20 @@
-export default function Results({ result, onReset }) {
+import { useState } from 'react';
+
+export default function Results({ result, onReset, onFeedback }) {
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
+
   if (!result) return null;
 
   const isReal = result.label === 'Real';
   const confidence = Number(result.confidence ?? 0);
   const forgeryProb = Number(result.forgery_probability ?? 0);
+  const feedbackGiven = result.feedback && result.feedback !== 'pending';
+
+  async function submitFeedback(verdict) {
+    setFeedbackBusy(true);
+    await onFeedback?.(result.id, verdict);
+    setFeedbackBusy(false);
+  }
 
   return (
     <section className="card results">
@@ -34,6 +45,38 @@ export default function Results({ result, onReset }) {
         The model scores the ELA image. Bright, textured regions can indicate manipulation, but
         heavily compressed photos may also show strong ELA.
       </p>
+
+      {result.id != null && (
+        <div className="feedback">
+          {feedbackGiven ? (
+            <p className="feedback-status">
+              Thanks — marked as {result.feedback}. The decision policy learns from this.
+            </p>
+          ) : (
+            <>
+              <p className="muted small">
+                Was this verdict correct? Your feedback trains the RL decision policy.
+              </p>
+              <div className="row feedback-row">
+                <button
+                  className="btn ghost small"
+                  disabled={feedbackBusy}
+                  onClick={() => submitFeedback('correct')}
+                >
+                  ✓ Correct
+                </button>
+                <button
+                  className="btn ghost small"
+                  disabled={feedbackBusy}
+                  onClick={() => submitFeedback('incorrect')}
+                >
+                  ✗ Incorrect
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <button className="btn" onClick={onReset}>
         Analyze another image

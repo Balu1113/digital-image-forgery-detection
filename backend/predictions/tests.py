@@ -99,3 +99,136 @@ class HealthTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["django"], "ok")
         self.assertTrue(response.json()["inference"]["reachable"])
+
+
+def _jpeg_bytes():
+    buffer = io.BytesIO()
+    Image.new("RGB", (32, 32), (10, 10, 10)).save(buffer, "JPEG")
+    return buffer.getvalue()
+
+
+def _stored_prediction(user, **overrides):
+    from .models import Prediction
+
+    defaults = dict(
+        user=user,
+        filename="stored.jpg",
+        label="Real",
+        confidence=80.0,
+        forgery_probability=0.2,
+        real_probability=0.8,
+        original_image=SimpleUploadedFile("o.jpg", _jpeg_bytes(), "image/jpeg"),
+        ela_image=SimpleUploadedFile("e.jpg", _jpeg_bytes(), "image/jpeg"),
+        policy_state=4,
+        policy_action=1,
+        policy_threshold=0.45,
+    )
+    defaults.update(overrides)
+    return Prediction.objects.create(**defaults)
+
+
+class FeedbackTests(APITestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="fb_user", password="supersecret123")
+        self.prediction = _stored_prediction(self.owner)
+        self.url = f"/api/predictions/{self.prediction.pk}/feedback/"
+
+    def test_feedback_requires_auth(self):
+        response = self.client.post(self.url, {"verdict": "correct"})
+        self.assertEqual(response.status_code, 401)
+
+    def test_feedback_on_someone_elses_prediction_is_404(self):
+        other = User.objects.create_user(username="intruder", password="supersecret123")
+        self.client.force_authenticate(user=other)
+        response = self.client.post(self.url, {"verdict": "correct"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_invalid_verdict_rejected(self):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.post(self.url, {"verdict": "maybe"})
+        self.assertEqual(response.status_code, 400)
+        self.prediction.refresh_from_db()
+        self.assertEqual(self.prediction.feedback, "pending")
+
+    @patch("predictions.views.record_feedback", return_value=True)
+    def test_correct_feedback_relays_reward(self, relay):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.post(self.url, {"verdict": "correct"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["feedback"], "correct")
+        self.assertTrue(payload["synced"])
+
+        # First feedback = one fresh pull: (state, action, reward, count).
+        relay.assert_called_once_with(4, 1, 1.0, count=True)
+
+        self.prediction.refresh_from_db()
+        self.assertEqual(self.prediction.feedback, "correct")
+        self.assertIsNotNone(self.prediction.feedback_at)
+
+    @patch("predictions.views.record_feedback", return_value=True)
+    def test_changing_feedback_sends_delta_without_new_pull(self, relay):
+        self.client.force_authenticate(user=self.owner)
+        self.client.post(self.url, {"verdict": "correct"})
+        self.client.post(self.url, {"verdict": "incorrect"})
+
+        self.assertEqual(relay.call_count, 2)
+        args, kwargs = relay.call_args
+        self.assertEqual(args, (4, 1, -2.0))
+        self.assertFalse(kwargs["count"])
+
+        self.prediction.refresh_from_db()
+        self.assertEqual(self.prediction.feedback, "incorrect")
+
+    @patch("predictions.views.record_feedback", return_value=False)
+    def test_feedback_stored_when_service_unreachable(self, relay):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.post(self.url, {"verdict": "incorrect"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["synced"])
+        self.prediction.refresh_from_db()
+        self.assertEqual(self.prediction.feedback, "incorrect")
+
+    @patch("predictions.views.record_feedback")
+    def test_prediction_without_policy_skips_relay(self, relay):
+        legacy = _stored_prediction(
+            self.owner, policy_state=None, policy_action=None, policy_threshold=None
+        )
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.post(
+            f"/api/predictions/{legacy.pk}/feedback/", {"verdict": "correct"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["synced"])
+        relay.assert_not_called()
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.feedback, "correct")
+
+
+class PolicyStorageTests(APITestCase):
+    @patch(
+        "predictions.views.analyze_image",
+        return_value={
+            **FAKE_RESULT,
+            "policy": {"state": 7, "action": 2, "threshold": 0.55},
+        },
+    )
+    def test_create_stores_bandit_decision(self, mocked):
+        user = User.objects.create_user(username="policy_user", password="supersecret123")
+        self.client.force_authenticate(user=user)
+
+        created = self.client.post("/api/predictions/", {"image": _upload()}, format="multipart")
+        self.assertEqual(created.status_code, 201)
+
+        payload = created.json()
+        self.assertEqual(payload["policy_state"], 7)
+        self.assertEqual(payload["policy_action"], 2)
+        self.assertEqual(payload["policy_threshold"], 0.55)
+        self.assertEqual(payload["feedback"], "pending")
+
+        listed = self.client.get("/api/predictions/").json()[0]
+        self.assertEqual(listed["policy_state"], 7)
+        self.assertEqual(listed["feedback"], "pending")

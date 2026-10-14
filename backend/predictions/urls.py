@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    FeedbackView,
     HealthView,
     LoginView,
     LogoutView,
@@ -18,4 +19,9 @@ urlpatterns = [
     path("health/", HealthView.as_view(), name="health"),
     path("predictions/", PredictionListCreateView.as_view(), name="prediction-list"),
     path("predictions/<int:pk>/", PredictionDetailView.as_view(), name="prediction-detail"),
+    path(
+        "predictions/<int:pk>/feedback/",
+        FeedbackView.as_view(),
+        name="prediction-feedback",
+    ),
 ]
